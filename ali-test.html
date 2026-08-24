@@ -1,0 +1,318 @@
+<!doctype html>
+
+<html>
+  <head>
+    <title>Ali WebSocket Test</title>
+  </head>
+
+  <body>
+    <h2>Ali - Authenticated WebSocket</h2>
+
+    <input id="msg" placeholder="Type message..." />
+
+    <button onclick="sendMessage()">
+      Send
+    </button>
+
+    <button onclick="markUnreadAsRead()">
+      Mark Unread as Read
+    </button>
+
+    <script>
+      const token =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmE4NWFlOGE4M2FlYzdjZmRiZThmMGZkIiwidXNlcm5hbWUiOiJhbGkiLCJleHAiOjE3ODcyMzQxNTV9.vte1kkq2ZtwwJAlawRJgzif15tMrHOe-CMK89KYDqkE";
+
+      const CURRENT_USER_ID =
+        "6a85ae8a83aec7cfdbe8f0fd";
+
+      const socket = new WebSocket(
+        `ws://127.0.0.1:8000/ws/general?token=${token}`
+      );
+
+      // --------------------------------
+      // Store unread message IDs
+      // --------------------------------
+
+      let unreadMessageIds = [];
+
+      // --------------------------------
+      // Prevent duplicate delivery ACKs
+      // --------------------------------
+
+      const deliveredMessageIds = new Set();
+
+
+      // --------------------------------
+      // WebSocket Connected
+      // --------------------------------
+
+      socket.onopen = () => {
+
+        console.log(
+          "✅ Ali WebSocket Connected"
+        );
+
+      };
+
+
+      // --------------------------------
+      // Receive WebSocket messages
+      // --------------------------------
+
+      socket.onmessage = (event) => {
+
+        const data = JSON.parse(event.data);
+
+        console.log(
+          "📩 Received:",
+          data
+        );
+
+
+        // --------------------------------
+        // Unread Messages
+        // --------------------------------
+
+        if (data.type === "unread_messages") {
+
+          unreadMessageIds = data.message_ids || [];
+
+          console.log(
+            "🔔 UNREAD MESSAGES RECEIVED"
+          );
+
+          console.log(
+            "🔢 Unread Count:",
+            data.count
+          );
+
+          console.log(
+            "🆔 Unread Message IDs:",
+            data.message_ids
+          );
+
+          return;
+        }
+
+
+        // --------------------------------
+        // Message History
+        // --------------------------------
+
+        if (data.type === "message_history") {
+
+          console.log(
+            "📚 History Message:",
+            data.message
+          );
+
+          // IMPORTANT:
+          // Do NOT send message_delivered here.
+          //
+          // These are old messages loaded from MongoDB.
+          // They are not new live messages.
+
+          return;
+        }
+
+
+        // --------------------------------
+        // Live Message
+        // --------------------------------
+
+        if (data.type === "message") {
+
+          console.log(
+            "📩 Live Message Received:",
+            data.message
+          );
+
+
+          // --------------------------------
+          // Receiver sends delivery ACK
+          // --------------------------------
+
+          if (
+            data.sender_id !== CURRENT_USER_ID &&
+            !deliveredMessageIds.has(data.id)
+          ) {
+
+            deliveredMessageIds.add(data.id);
+
+            socket.send(
+              JSON.stringify({
+
+                type: "message_delivered",
+
+                message_id: data.id
+
+              })
+            );
+
+
+            console.log(
+              "📦 Delivery acknowledgement sent:",
+              data.id
+            );
+
+          }
+
+          return;
+        }
+
+
+        // --------------------------------
+        // Message Delivered
+        // --------------------------------
+
+        if (data.type === "message_delivered") {
+
+          console.log(
+            "✓✓ Message delivered:",
+            data.message_id
+          );
+
+          return;
+        }
+
+
+        // --------------------------------
+        // Message Read
+        // --------------------------------
+
+        if (data.type === "message_read") {
+
+          console.log(
+            "🔵 Message read:",
+            data.message_id
+          );
+
+          return;
+        }
+
+      };
+
+
+      // --------------------------------
+      // Mark Unread Messages as Read
+      // --------------------------------
+
+      function markUnreadAsRead() {
+
+        if (unreadMessageIds.length === 0) {
+
+          console.log(
+            "ℹ️ No unread messages."
+          );
+
+          return;
+        }
+
+
+        unreadMessageIds.forEach(
+          (messageId) => {
+
+            socket.send(
+              JSON.stringify({
+
+                type: "message_read",
+
+                message_id: messageId
+
+              })
+            );
+
+
+            console.log(
+              "👁️ Read acknowledgement sent:",
+              messageId
+            );
+
+          }
+        );
+
+
+        // Clear unread list after sending ACKs
+
+        unreadMessageIds = [];
+
+
+        console.log(
+          "✅ All unread messages marked as read."
+        );
+
+      }
+
+
+      // --------------------------------
+      // WebSocket Error
+      // --------------------------------
+
+      socket.onerror = (error) => {
+
+        console.error(
+          "❌ WebSocket Error:",
+          error
+        );
+
+      };
+
+
+      // --------------------------------
+      // WebSocket Closed
+      // --------------------------------
+
+      socket.onclose = (event) => {
+
+        console.log(
+          "🔴 Connection Closed:",
+          event.code,
+          event.reason
+        );
+
+      };
+
+
+      // --------------------------------
+      // Send Message
+      // --------------------------------
+
+      function sendMessage() {
+
+        const input =
+          document.getElementById("msg");
+
+        const message =
+          input.value.trim();
+
+
+        if (!message) {
+          return;
+        }
+
+
+        socket.send(
+          JSON.stringify({
+
+            type: "message",
+
+            message: message
+
+          })
+        );
+
+
+        console.log(
+          "📤 Message sent:",
+          message
+        );
+
+
+        input.value = "";
+
+      }
+
+    </script>
+
+  </body>
+</html>
